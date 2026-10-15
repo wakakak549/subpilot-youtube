@@ -1,0 +1,32 @@
+{
+  "manifest_version": 3,
+  "name": "SubPilot - YouTube AI 双语字幕",
+  "version": "0.1.6",
+  "description": "使用自己的 AI API 翻译 YouTube 字幕，支持双语显示、提前翻译和本地缓存。",
+  "minimum_chrome_version": "116",
+  "permissions": ["storage"],
+  "host_permissions": ["https://www.youtube.com/*"],
+  "optional_host_permissions": ["https://*/*", "http://*/*"],
+  "background": { "service_worker": "background.js", "type": "module" },
+  "content_scripts": [
+    {
+      "matches": ["https://www.youtube.com/*"],
+      "js": ["inject.js"],
+      "run_at": "document_start",
+      "world": "MAIN"
+    },
+    {
+      "matches": ["https://www.youtube.com/*"],
+      "js": ["lib/core.js", "content.js"],
+      "css": ["content.css"],
+      "run_at": "document_start"
+    }
+  ],
+  "options_ui": { "page": "options.html", "open_in_tab": true },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "SubPilot - YouTube AI 双语字幕",
+    "default_icon": { "16": "icons/icon16.png", "48": "icons/icon48.png", "128": "icons/icon128.png" }
+  },
+  "icons": { "16": "icons/icon16.png", "48": "icons/icon48.png", "128": "icons/icon128.png" }
+}

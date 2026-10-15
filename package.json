@@ -1,0 +1,23 @@
+{
+  "name": "subpilot-youtube",
+  "version": "0.1.6",
+  "description": "Translate YouTube captions with your own AI API or a local LM Studio model.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/wakakak549/subpilot-youtube.git"
+  },
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "test": "node --test tests/*.test.mjs",
+    "test:browser": "node tests/browser.mjs"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.64.0",
+    "@xmldom/xmldom": "0.9.12",
+    "esbuild": "0.28.2",
+    "lucide": "1.56.0"
+  }
+}

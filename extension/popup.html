@@ -1,0 +1,13 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>SubPilot</title><link rel="stylesheet" href="ui.css"></head>
+<body class="popup">
+  <header class="popup-header"><div class="brand"><img src="icons/icon48.png" alt=""><h1>SubPilot</h1></div><button id="settings" class="icon-button" title="设置" aria-label="设置"><i data-lucide="settings"></i></button></header>
+  <section class="popup-section popup-status"><div class="status-line"><span id="statusDot" class="status-dot"></span><span id="videoStatus">正在读取</span></div><p id="videoDetail"></p></section>
+  <section class="popup-section"><div class="toggle-row"><label for="enabled">启用翻译</label><label class="switch"><input id="enabled" type="checkbox" aria-label="启用翻译"><span></span></label></div></section>
+  <section class="popup-section"><div class="field"><label>显示模式</label><div class="segments" role="group" aria-label="显示模式"><label><input type="radio" name="viewMode" value="bilingual">双语</label><label><input type="radio" name="viewMode" value="translated">译文</label><label><input type="radio" name="viewMode" value="original">原文</label></div></div></section>
+  <div class="popup-bottom"><span id="modelName"></span><button id="retry" class="icon-button" title="重试翻译" aria-label="重试翻译"><i data-lucide="refresh-cw"></i></button></div>
+  <p id="notice" role="status" aria-live="polite"></p>
+  <script src="vendor/icons.js"></script><script src="lib/ui.js"></script><script src="popup.js"></script>
+</body>
+</html>

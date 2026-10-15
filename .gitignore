@@ -1,0 +1,19 @@
+node_modules/
+dist/
+artifacts/
+.cache/
+test-results/
+*.log
+
+# Local research checkouts and diagnostic data are not part of the extension.
+references/
+research/
+
+# Local credentials and environment settings.
+.env
+.env.*
+!.env.example
+
+.DS_Store
+Thumbs.db
+desktop.ini

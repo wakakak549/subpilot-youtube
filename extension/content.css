@@ -1,0 +1,9 @@
+#movie_player.ytai-hide-native .ytp-caption-window-container {
+  visibility: hidden !important;
+}
+#ytai-root {
+  position: absolute;
+  inset: 0;
+  z-index: 55;
+  pointer-events: none;
+}
