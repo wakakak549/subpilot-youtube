@@ -40,12 +40,14 @@ To update an unpacked installation, replace or pull the files, reload SubPilot o
 
 ## Configure your API
 
-SubPilot sends requests to **`/chat/completions`** under the base URL. Responses API-only services are not supported. Use a model ID actually served by your provider; the prefilled ID does not grant model access.
+SubPilot sends requests to **`/chat/completions`** under the base URL. Responses API-only services are not supported. Use a model ID actually served by your provider.
+
+The model-specific prompt, sampling, and output validation documented here are optimized for **Hy-MT2**. This README makes no quality or compatibility claim for any particular cloud model.
 
 | Setting | Default / behavior |
 | --- | --- |
 | API base URL | `https://api.openai.com/v1` |
-| Model | `gpt-6.1-sol`; replace with your provider's model ID |
+| Model | Your provider's exact model ID |
 | API format | Automatic; loopback URLs use compatibility mode |
 | Target language | Simplified Chinese; editable |
 | Strict JSON output | Enabled; disable if your service lacks JSON Schema support |
@@ -115,7 +117,7 @@ node tests/lmstudio-smoke.mjs
 
 The YouTube smoke script defaults to the standard Windows Chrome path; set `YTAI_BROWSER_PATH` on other systems. LM Studio checks only connect to loopback addresses and do not load or switch models.
 
-The current regression suite covers **50 core tests and 24 browser integration checks**. See the [verification notes](docs/verification.md) and the [merged-subtitle bug report](docs/bugs/merged-subtitles.md) for tested behavior and remaining real-video validation. Local profiles, API diagnostics, and screenshots generated under `.cache/` and `artifacts/` are excluded from Git.
+The current regression suite covers **51 core tests and 25 browser integration checks**. See the [verification notes](docs/verification.md) and the [merged-subtitle bug report](docs/bugs/merged-subtitles.md) for tested behavior and remaining real-video validation. Local profiles, API diagnostics, and screenshots generated under `.cache/` and `artifacts/` are excluded from Git.
 
 ## Contributing
 

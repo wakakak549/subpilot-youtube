@@ -40,12 +40,14 @@ SubPilot 是一个 Chrome Manifest V3 扩展，读取 YouTube 已有字幕并随
 
 ## API 配置
 
-插件在 API 根地址后请求 **`/chat/completions`**，暂不支持只有 Responses API 的服务。模型 ID 必须由你的服务实际提供；预填名称不代表账号已有访问权限。
+插件在 API 根地址后请求 **`/chat/completions`**，暂不支持只有 Responses API 的服务。模型 ID 必须由你的服务实际提供。
+
+本文记录的模型专项提示词、采样参数和输出校验只针对 **Hy-MT2** 优化，不对其他具体云端模型的翻译质量或兼容性作保证。
 
 | 设置 | 默认值 / 行为 |
 | --- | --- |
 | API 地址 | `https://api.openai.com/v1` |
-| 模型 | `gpt-6.1-sol`；请按服务实际提供的模型修改 |
+| 模型 | 填写服务实际提供的模型 ID |
 | 接口类型 | 自动识别；本地回环地址使用兼容模式 |
 | 目标语言 | 简体中文，可修改 |
 | 严格 JSON 输出 | 开启；服务不支持 JSON Schema 时关闭 |
@@ -115,7 +117,7 @@ node tests/lmstudio-smoke.mjs
 
 YouTube 检查脚本默认使用 Windows 标准 Chrome 路径，其他系统请设置 `YTAI_BROWSER_PATH`。LM Studio 检查只连接回环地址，不加载或切换模型。
 
-当前回归套件包含 **50 项核心测试、24 项浏览器集成检查**。已测范围与真实视频验收限制见[验证记录](docs/verification.md)，相关问题见[字幕合并排查记录](docs/bugs/merged-subtitles.md)。测试生成的 `.cache/` 浏览器配置与 `artifacts/` 截图、接口诊断文件不上传 Git。
+当前回归套件包含 **51 项核心测试、25 项浏览器集成检查**。已测范围与真实视频验收限制见[验证记录](docs/verification.md)，相关问题见[字幕合并排查记录](docs/bugs/merged-subtitles.md)。测试生成的 `.cache/` 浏览器配置与 `artifacts/` 截图、接口诊断文件不上传 Git。
 
 ## 参与贡献
 
