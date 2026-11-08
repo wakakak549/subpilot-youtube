@@ -324,9 +324,51 @@ try {
     await expect.poll(async () => (await getStatus()).ready).toBe(120);
     assert.equal(api.bodies[before].max_tokens, 12800);
   });
+  await check('continuous playback refills Hy-MT2 groups across a short prefetch boundary without single-cue requests', async () => {
+    await videoPage.evaluate(() => window.fixture.pause());
+    await options.locator('#model').fill('hy-mt2-1.8b');
+    await options.locator('#batchSize').fill('20');
+    await options.locator('#prefetchSeconds').fill('15');
+    await options.locator('#save').click();
+    await expect(options.locator('#notice')).toHaveText('配置已保存');
+    const before = api.calls.length;
+    await videoPage.evaluate(id => window.fixture.navigate(id, 'Rolling refill'), videoA);
+    await expect.poll(async () => (await getStatus()).total).toBe(24);
+    try {
+      await videoPage.bringToFront();
+      // Reset the audio fixture after earlier seeks before timing playback.
+      await videoPage.evaluate(() => { const video = document.querySelector('video'); video.playbackRate = 1; video.load(); });
+      await videoPage.evaluate(() => window.fixture.play());
+      await expect.poll(async () => (await getStatus()).ready).toBe(8);
+      await videoPage.waitForTimeout(900);
+      assert.deepEqual(api.calls.slice(before).map(batch => batch.length), [8], 'the extra range must not trigger unlimited refills');
+      await videoPage.evaluate(() => { document.querySelector('video').playbackRate = 8; });
+      await expect.poll(async () => (await getStatus()).ready, { timeout: 15000 }).toBe(24);
+      assert.deepEqual(api.calls.slice(before).map(batch => batch.map(line => line.id)), [
+        [0, 1, 2, 3, 4, 5, 6, 7], [8, 9, 10, 11, 12, 13, 14, 15], [16, 17, 18, 19, 20, 21, 22, 23]
+      ]);
+      assert.ok(await videoPage.evaluate(() => document.querySelector('video').currentTime >= 33));
+      assert.ok(api.bodies.slice(before).every(body => body.messages[0].content.includes('Rolling refill video title')));
+      await expect(videoPage.locator('#ytai-root .badge')).toBeHidden();
+    } catch (failure) {
+      console.error('ROLLING MEDIA', await videoPage.evaluate(() => {
+        const video = document.querySelector('video');
+        return { time: video.currentTime, paused: video.paused, rate: video.playbackRate, readyState: video.readyState,
+          seeking: video.seeking, networkState: video.networkState, duration: video.duration, visibility: document.visibilityState,
+          buffered: Array.from({ length: video.buffered.length }, (_, index) => [video.buffered.start(index), video.buffered.end(index)]), error: video.error?.message };
+      }));
+      throw failure;
+    } finally {
+      await videoPage.evaluate(() => { window.fixture.pause(); document.querySelector('video').playbackRate = .0625; });
+    }
+    await videoPage.evaluate(() => window.fixture.seek(54.1));
+    await expect(videoPage.locator('#ytai-root .translated')).toHaveText('译文：Rolling refill sentence 18.');
+  });
   await check('Hy-MT2 uses title and adjacent context in eight-cue windows while displaying each original timestamp', async () => {
     await videoPage.evaluate(() => window.fixture.pause());
     await options.locator('#model').fill('hy-mt2-7b');
+    await options.locator('#batchSize').fill('100');
+    await options.locator('#prefetchSeconds').fill('600');
     await options.locator('#save').click();
     await expect(options.locator('#notice')).toHaveText('配置已保存');
     const before = api.calls.length;

@@ -126,6 +126,71 @@ test('Hy-MT2 context windows cap requests at eight while the legacy 100-segment 
   assert.equal(Core.pickBatch(cues, 0, { ...cfg, batchSize: 4 }).lines.length, 4);
 });
 
+test('rolling playback refills full Hy-MT2 groups instead of sending each cue at the prefetch boundary', () => {
+  for (const prefetchSeconds of [15, 180]) {
+    const cues = Array.from({ length: 240 }, (_, id) => ({ id, start: id * 3000, end: id * 3000 + 2800, text: `Line ${id}.` }));
+    const cfg = Core.normalizeConfig({ model: 'hy-mt2-1.8b', batchSize: 20, prefetchSeconds });
+    const requests = [];
+    for (let time = 0; time <= 180000; time += 750) {
+      let batch;
+      while ((batch = Core.pickBatch(cues, time, cfg))) {
+        assert.equal(batch.lines.length, 8);
+        assert.ok(cues[batch.lines[0].id].start <= time + prefetchSeconds * 1000);
+        for (const line of batch.lines) {
+          assert.equal(cues[line.id].translated, undefined);
+          assert.ok(cues[line.id].start <= time + prefetchSeconds * 1000 + 30000);
+          cues[line.id].translated = 'Done';
+        }
+        requests.push({ time, ids: batch.lines.map(line => line.id) });
+        assert.ok(requests.length < 100, 'refilling must stop at the finite horizon');
+      }
+    }
+    assert.ok(requests.filter(request => request.time > 0).length >= 5);
+    assert.equal(new Set(requests.flatMap(request => request.ids)).size, requests.length * 8);
+  }
+});
+
+test('context refill may finish a group up to 30 seconds beyond the horizon but cannot chain into distant captions', () => {
+  const cues = [
+    { id: 0, start: 0, end: 10000, text: 'Current.' },
+    { id: 1, start: 10000, end: 12000, text: 'Nearby.' },
+    { id: 2, start: 25000, end: 27000, text: 'Beyond the boundary.' },
+    { id: 3, start: 50000, end: 52000, text: 'Within the allowance.' },
+    { id: 4, start: 54000, end: 56000, text: 'Outside the allowance.' },
+    { id: 5, start: 120000, end: 122000, text: 'Distant.' }
+  ];
+  const cfg = Core.normalizeConfig({ model: 'hy-mt2-7b', prefetchSeconds: 15, batchSize: 8 });
+  const batch = Core.pickBatch(cues, 8000, cfg);
+  assert.deepEqual(batch.lines.map(line => line.id), [0, 1, 2, 3]);
+  assert.deepEqual(batch.context_after, ['Outside the allowance.', 'Distant.']);
+  for (const cue of cues.slice(0, 3)) cue.translated = 'Done';
+  assert.equal(Core.pickBatch(cues, 8000, cfg), null, 'an outside cue alone cannot trigger another refill');
+  assert.deepEqual(Core.pickBatch(cues, 35000, cfg).lines.map(line => line.id), [3, 4]);
+});
+
+test('urgent cues, seeks, cache gaps and short tails do not wait to form a full context group', () => {
+  const cues = Array.from({ length: 13 }, (_, id) => ({ id, start: id * 3000, end: id * 3000 + 2800, text: `Line ${id}.` }));
+  const cfg = Core.normalizeConfig({ model: 'hy-mt2-7b', prefetchSeconds: 15, batchSize: 8 });
+  for (const cue of cues) cue.translated = 'Cached';
+  delete cues[0].translated;
+  assert.deepEqual(Core.pickBatch(cues, 1000, cfg).lines.map(line => line.id), [0]);
+  delete cues[11].translated; delete cues[12].translated;
+  assert.deepEqual(Core.pickBatch(cues, 33100, cfg).lines.map(line => line.id), [11, 12]);
+  assert.equal(Core.pickBatch(cues, 40000, cfg), null);
+  for (const cue of cues) delete cue.translated;
+  assert.equal(Core.pickBatch(cues, 0, { ...cfg, batchSize: 1 }).lines.length, 1);
+  assert.equal(Core.pickBatch(cues, 0, { ...cfg, batchSize: 4 }).lines.length, 4);
+  assert.equal(Core.pickBatch(cues, 0, { ...cfg, batchSize: 6 }).lines.length, 6);
+  assert.deepEqual(Core.pickBatch(cues, 100000, cfg), null);
+});
+
+test('turning off context and other models keep the configured prefetch boundary', () => {
+  const cues = Array.from({ length: 40 }, (_, id) => ({ id, start: id * 3000, end: id * 3000 + 2800, text: `Line ${id}.` }));
+  const cfg = Core.normalizeConfig({ model: 'hy-mt2-1.8b', prefetchSeconds: 15, batchSize: 20, useContext: false });
+  assert.deepEqual(Core.pickBatch(cues, 0, cfg).lines.map(line => line.id), [0, 1, 2, 3, 4, 5]);
+  assert.deepEqual(Core.pickBatch(cues, 0, { ...cfg, useContext: true, model: 'another-model' }).lines.map(line => line.id), [0, 1, 2, 3, 4, 5]);
+});
+
 test('contextual output cannot shift IDs, guess unnumbered alignment or copy reference text', () => {
   const lines = [{ id: 8, text: 'The bank is steep.' }, { id: 9, text: 'Keep away.' }];
   const options = { strictIds: true, referenceTexts: ['BACKGROUND_ONLY river safety demonstration'] };

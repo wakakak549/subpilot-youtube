@@ -23,6 +23,7 @@
   const MAX_BATCH_SIZE = 100;
   const MAX_PREFETCH_SECONDS = 600;
   const MAX_CONTEXT_BATCH_SIZE = 8;
+  const MAX_CONTEXT_PREFETCH_EXTRA_MS = 30000;
   const MAX_VIDEO_TITLE_LENGTH = 500;
   const TERMINAL = /[.!?。！？…][\s)"'』」]*$/;
 
@@ -203,11 +204,16 @@
   function pickBatch(cues, timeMs, cfg) {
     const active = activeIndex(cues, timeMs);
     const end = timeMs + cfg.prefetchSeconds * 1000;
+    const contextualHy = cfg.useContext !== false && isHyMTModel(cfg.model);
+    const limit = contextualHy ? Math.min(cfg.batchSize, MAX_CONTEXT_BATCH_SIZE) : cfg.batchSize;
+    // Start only when an untranslated cue enters the look-ahead window.
+    // Finish that group slightly beyond the boundary so rolling playback
+    // does not send one request for every newly entering subtitle.
+    const batchEnd = end + (contextualHy ? MAX_CONTEXT_PREFETCH_EXTRA_MS : 0);
     const candidates = cues.filter(cue => !cue.translated &&
-      (cue.id === active || (cue.start >= timeMs && cue.start <= end)));
-    const limit = cfg.useContext !== false && isHyMTModel(cfg.model) ? Math.min(cfg.batchSize, MAX_CONTEXT_BATCH_SIZE) : cfg.batchSize;
+      (cue.id === active || (cue.start >= timeMs && cue.start <= batchEnd)));
+    if (!candidates.length || (candidates[0].id !== active && candidates[0].start > end)) return null;
     const lines = candidates.slice(0, limit).map(({ id, text }) => ({ id, text }));
-    if (!lines.length) return null;
     return {
       lines,
       context_before: cues.slice(Math.max(0, lines[0].id - 3), lines[0].id).map(cue => cue.text),
@@ -406,7 +412,7 @@
   }
 
   globalThis.YTAICore = Object.freeze({
-    DEFAULTS, CHANNEL, MAX_BODY_SIZE, MAX_BATCH_SIZE, MAX_PREFETCH_SECONDS, MAX_CONTEXT_BATCH_SIZE, MAX_VIDEO_TITLE_LENGTH, VIDEO_ID_RE, clamp, isLocalAPI, isHyMTModel, isCompatibleAPI, normalizeBaseURL, normalizeConfig, publicConfig,
+    DEFAULTS, CHANNEL, MAX_BODY_SIZE, MAX_BATCH_SIZE, MAX_PREFETCH_SECONDS, MAX_CONTEXT_BATCH_SIZE, MAX_CONTEXT_PREFETCH_EXTRA_MS, MAX_VIDEO_TITLE_LENGTH, VIDEO_ID_RE, clamp, isLocalAPI, isHyMTModel, isCompatibleAPI, normalizeBaseURL, normalizeConfig, publicConfig,
     getVideoId, captionURL, trackKey, isChineseLanguage, isChineseTrack, parseCaptions, normalizeCues, groupCues, activeIndex, pickBatch, parseTranslations, parseLineTranslations, cleanTranslationText, isTranslationPlausible, digest
   });
 })();

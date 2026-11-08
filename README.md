@@ -6,7 +6,7 @@ English | [简体中文](README.zh-CN.md)
 
 SubPilot is a Chrome Manifest V3 extension that translates existing YouTube captions and displays them in sync with playback. Bring your own API endpoint, key, and model; no SubPilot account or backend is required.
 
-Current version: **0.1.8**. The settings and popup are currently in Simplified Chinese. The default translation language is Simplified Chinese and can be changed in settings.
+Current version: **0.1.9**. The settings and popup are currently in Simplified Chinese. The default translation language is Simplified Chinese and can be changed in settings.
 
 ## Features
 
@@ -37,7 +37,7 @@ Requires desktop **Chrome 116+** and a YouTube video with existing captions.
 
 The checked-in `extension/` folder is ready to load. **Node.js is only needed for development.**
 
-To update an unpacked installation, replace or pull the files, reload SubPilot on `chrome://extensions/`, then refresh YouTube. Version 0.1.8 keeps your API settings and starts a fresh translation cache for the new context mode.
+To update an unpacked installation, replace or pull the files, reload SubPilot on `chrome://extensions/`, then refresh YouTube. Version 0.1.9 keeps your API settings and the translation cache from 0.1.8.
 
 ## Configure your API
 
@@ -61,6 +61,8 @@ The model-specific prompt, sampling, and output validation documented here are o
 For a remote third-party compatible endpoint, choose **LM Studio / 兼容接口** under **接口兼容设置**. This uses `max_tokens` and omits OpenAI-specific reasoning parameters. For a local proxy that expects OpenAI parameters, explicitly choose **OpenAI**.
 
 The batch size is an upper bound. The current playback position, look-ahead window, and cache determine how many segments are sent. With context enabled, Hy-MT2 uses at most 8 segments per request; smaller configured batches stay smaller. Disabling **结合标题与前后字幕翻译** (Use title and caption context) restores the configured limit of up to 100. Larger batches can increase latency and output-format failures.
+
+For Hy-MT2 context mode, the look-ahead setting triggers the next group rather than cutting it off mid-batch. A group may extend up to **30 seconds beyond** that boundary, which prevents steady playback from requesting each newly entering caption separately. A subtitle inside the normal window must be missing before another group starts. Current missing captions are handled immediately; sparse captions, the end of a video, cache hits, and error recovery can still produce smaller requests.
 
 API usage, including the connection test, is handled and billed by your configured provider. SubPilot does not include API credit or reuse a ChatGPT/Codex login.
 
@@ -126,7 +128,7 @@ node tests/context-smoke.mjs
 
 The YouTube smoke script defaults to the standard Windows Chrome path; set `YTAI_BROWSER_PATH` on other systems. LM Studio checks only connect to loopback addresses and do not load or switch models.
 
-The current regression suite covers **56 core tests and 29 browser integration checks**. See the [verification notes](docs/verification.md) and the [merged-subtitle bug report](docs/bugs/merged-subtitles.md) for tested behavior and remaining real-video validation. Local profiles, API diagnostics, and screenshots generated under `.cache/` and `artifacts/` are excluded from Git.
+The current regression suite covers **60 core tests and 30 browser integration checks**. See the [verification notes](docs/verification.md) and the [merged-subtitle bug report](docs/bugs/merged-subtitles.md) for tested behavior and remaining real-video validation. Local profiles, API diagnostics, and screenshots generated under `.cache/` and `artifacts/` are excluded from Git.
 
 ## Contributing
 
