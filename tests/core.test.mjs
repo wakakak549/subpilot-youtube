@@ -114,6 +114,32 @@ test('larger batches reach 100 subtitles while respecting prefetch and translate
   assert.equal(Core.normalizeConfig({ batchSize: 6, prefetchSeconds: 45 }).batchSize, 6);
 });
 
+test('Hy-MT2 context windows cap requests at eight while the legacy 100-segment option remains available', () => {
+  const cues = Array.from({ length: 120 }, (_, id) => ({ id, start: id * 3000, end: id * 3000 + 2800, text: `Line ${id}.` }));
+  const cfg = Core.normalizeConfig({ model: 'hy-mt2-7b', batchSize: 100, prefetchSeconds: 600 });
+  assert.equal(cfg.useContext, true);
+  const batch = Core.pickBatch(cues, 12000, cfg);
+  assert.deepEqual(batch.lines.map(line => line.id), [4, 5, 6, 7, 8, 9, 10, 11]);
+  assert.deepEqual(batch.context_before, ['Line 1.', 'Line 2.', 'Line 3.']);
+  assert.deepEqual(batch.context_after, ['Line 12.', 'Line 13.', 'Line 14.']);
+  assert.equal(Core.pickBatch(cues, 0, { ...cfg, useContext: false }).lines.length, 100);
+  assert.equal(Core.pickBatch(cues, 0, { ...cfg, batchSize: 4 }).lines.length, 4);
+});
+
+test('contextual output cannot shift IDs, guess unnumbered alignment or copy reference text', () => {
+  const lines = [{ id: 8, text: 'The bank is steep.' }, { id: 9, text: 'Keep away.' }];
+  const options = { strictIds: true, referenceTexts: ['BACKGROUND_ONLY river safety demonstration'] };
+  for (const response of ['[0] 河岸很陡。\n[1] 请远离。', '河岸很陡。\n请远离。', '[9] 请远离。\n[8] 河岸很陡。', '[8] 河岸很陡。\n[9] 请远离。\n[10] 到河边休息。']) {
+    const result = Core.parseLineTranslations(response, lines, [], options);
+    assert.deepEqual(result.translations, []);
+    assert.equal(result.retryIndividually, true);
+  }
+  assert.deepEqual(Core.parseLineTranslations('[8] 河岸很陡。\n[9] BACKGROUND_ONLY river safety demonstration', lines, [], options).translations,
+    [{ id: 8, text: '河岸很陡。' }]);
+  assert.deepEqual(Core.parseLineTranslations('【背景信息】河边演示。', [lines[0]], [], options).translations, []);
+  assert.deepEqual(Core.parseLineTranslations('[8] 河岸很陡。\n[9] 请远离。', lines, [], options).missing, []);
+});
+
 test('bare loopback API addresses gain /v1 without changing explicit or remote routes', () => {
   for (const base of ['http://localhost:1234', 'http://127.0.0.1:1234/', 'http://[::1]:1234']) {
     assert.equal(Core.normalizeBaseURL(base), new URL(base).origin + '/v1');

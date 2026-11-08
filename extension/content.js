@@ -6,6 +6,7 @@
   let sessionId = crypto.randomUUID();
   let cues = [], trackId = '', fingerprint = '', tracks = [];
   let sourceIsChinese = false, sourceLanguage = '';
+  let videoTitle = '';
   let pending = false, error = null, isLive = false, playerDataReceived = false;
   let player = null, video = null, root = null, shadow = null;
   let originalEl = null, translatedEl = null, badgeEl = null;
@@ -66,7 +67,7 @@
     videoId = nextId;
     cues = []; tracks = []; trackId = ''; fingerprint = ''; sourceIsChinese = false; sourceLanguage = '';
     error = null; isLive = false; playerDataReceived = false;
-    captionSequence = 0; fallbackURL = null; bufferedCaption = null;
+    captionSequence = 0; fallbackURL = null; bufferedCaption = null; videoTitle = '';
     startedAt = Date.now(); ccTried = false; requests = 0; cacheHits = 0;
     restoreNative();
     bindPlayer();
@@ -253,7 +254,7 @@
     pending = true;
     render();
     try {
-      const response = await send({ type: 'TRANSLATE_BATCH', sessionId, videoId, trackId, ...batch });
+      const response = await send({ type: 'TRANSLATE_BATCH', sessionId, videoId, trackId, videoTitle: config.useContext ? videoTitle : '', ...batch });
       if (epoch !== requestVersion || sourceGeneration !== generation || sourceTrack !== trackId || Core.getVideoId(location.href) !== videoId || !config.enabled) return;
       for (const line of response?.translations || []) {
         const text = typeof line.text === 'string' ? Core.cleanTranslationText(line.text, line.id) : '';
@@ -278,7 +279,7 @@
   }
 
   function applyConfig(next) {
-    const changed = config && ['baseURL', 'model', 'apiFormat', 'targetLang', 'reasoningEffort', 'structuredOutput'].some(key => config[key] !== next[key]);
+    const changed = config && ['baseURL', 'model', 'apiFormat', 'targetLang', 'reasoningEffort', 'structuredOutput', 'useContext'].some(key => config[key] !== next[key]);
     config = next;
     invalidateRequest();
     error = null;
@@ -300,6 +301,15 @@
     else if (data.type === 'PLAYER_DATA') {
       syncRoute();
       if (!videoId || data.videoId !== videoId || !Array.isArray(data.tracks)) return;
+      const title = typeof data.videoTitle === 'string' ? data.videoTitle.replace(/\s+/g, ' ').trim().slice(0, Core.MAX_VIDEO_TITLE_LENGTH) : '';
+      if (title && title !== videoTitle) {
+        videoTitle = title;
+        if (config?.useContext) {
+          invalidateRequest();
+          for (const cue of cues) delete cue.translated;
+          error = null;
+        }
+      }
       tracks = data.tracks.filter(track => track && Core.captionURL(track.baseUrl, videoId)).slice(0, 100);
       playerDataReceived = true;
       isLive = Boolean(data.isLive);
@@ -315,6 +325,7 @@
         scheduleFallback(data.preferredURL);
       }
       render();
+      pump();
     }
   });
 

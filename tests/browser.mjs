@@ -25,8 +25,9 @@ const server = http.createServer(async (request, response) => {
   const body = JSON.parse(raw);
   const hy = /hy-mt2/i.test(body.model);
   const prompt = body.messages[0].content;
-  const numbered = hy ? [...prompt.matchAll(/^\[(\d+)\]\s*(.*)$/gm)].map(match => ({ id: Number(match[1]), text: match[2] })) : [];
-  const input = hy ? { subtitles: numbered.length ? numbered : [{ id: null, text: prompt.split('\n\n').at(-1) }] } : JSON.parse(body.messages[1].content);
+  const source = prompt.includes('\n\n【待翻译文本】\n') ? prompt.split('\n\n【待翻译文本】\n').at(-1) : prompt.split('\n\n').at(-1);
+  const numbered = hy ? [...source.matchAll(/^\[(\d+)\]\s*(.*)$/gm)].map(match => ({ id: Number(match[1]), text: match[2] })) : [];
+  const input = hy ? { subtitles: numbered.length ? numbered : [{ id: null, text: source }] } : JSON.parse(body.messages[1].content);
   api.calls.push(input.subtitles);
   api.bodies.push(body);
   const echoId = hy && api.hyEchoes > 0 ? input.subtitles[1]?.id : undefined;
@@ -97,10 +98,10 @@ const fixture = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Subtitl
     seek(time) { video.currentTime = time; return new Promise(resolve => video.addEventListener('seeked', resolve, { once: true })); },
     async captions(id, prefix, language = 'en') { await fetch('/api/timedtext?v=' + id + '&lang=' + encodeURIComponent(language) + '&fmt=json3&name=' + encodeURIComponent(prefix)); },
     async navigate(id, prefix, language = 'en') { document.dispatchEvent(new Event('yt-navigate-start')); history.pushState({}, '', '/watch?v=' + id); video.currentTime = 0; window.playerInfo = {
-      videoDetails: { videoId: id }, captions: { playerCaptionsTracklistRenderer: { captionTracks: prefix ? [{ baseUrl: 'https://www.youtube.com/api/timedtext?v=' + id + '&lang=' + encodeURIComponent(language) + '&fmt=json3&name=' + encodeURIComponent(prefix), languageCode: language }] : [] } }
+      videoDetails: { videoId: id, title: prefix + ' video title' }, captions: { playerCaptionsTracklistRenderer: { captionTracks: prefix ? [{ baseUrl: 'https://www.youtube.com/api/timedtext?v=' + id + '&lang=' + encodeURIComponent(language) + '&fmt=json3&name=' + encodeURIComponent(prefix), languageCode: language }] : [] } }
     }; document.dispatchEvent(new Event('yt-navigate-finish')); if (prefix) await window.fixture.captions(id, prefix, language); }
   };
-  window.playerInfo = { videoDetails: { videoId: '${videoA}' }, captions: { playerCaptionsTracklistRenderer: { captionTracks: [{ baseUrl: 'https://www.youtube.com/api/timedtext?v=${videoA}&lang=en&fmt=json3&name=Video%20A', languageCode: 'en' }] } } };
+  window.playerInfo = { videoDetails: { videoId: '${videoA}', title: 'Video A video title' }, captions: { playerCaptionsTracklistRenderer: { captionTracks: [{ baseUrl: 'https://www.youtube.com/api/timedtext?v=${videoA}&lang=en&fmt=json3&name=Video%20A', languageCode: 'en' }] } } };
   document.querySelector('#movie_player').getPlayerResponse = () => window.playerInfo;
   document.querySelector('.ytp-subtitles-button').onclick = event => event.currentTarget.setAttribute('aria-pressed', event.currentTarget.getAttribute('aria-pressed') === 'true' ? 'false' : 'true');
   </script></body></html>`;
@@ -111,6 +112,7 @@ try {
   await options.goto(`chrome-extension://${id}/options.html`);
   await check('extension loads with no missing assets or worker errors', async () => {
     await expect(options.locator('#model')).toHaveValue('gpt-6.1-sol');
+    await expect(options.locator('#useContext')).toBeChecked();
     await expect(options.locator('#configForm')).toHaveJSProperty('inert', false);
     await expect(options.locator('#save svg')).toHaveCount(1);
     assert.equal((await options.locator('.brand img').evaluate(image => image.naturalWidth)), 48);
@@ -196,6 +198,11 @@ try {
     await videoPage.waitForTimeout(1000);
     assert.equal((await getStatus()).ready, 6);
     assert.equal(await videoPage.locator('#movie_player').evaluate(player => player.classList.contains('ytai-hide-native')), true);
+    const batch = api.bodies.find(body => body.messages[1] && JSON.parse(body.messages[1].content).subtitles[0].text === 'Video A sentence 0.');
+    const data = JSON.parse(batch.messages[1].content);
+    assert.equal(data.video_title, 'Video A video title');
+    assert.deepEqual(data.context_before, []);
+    assert.deepEqual(data.context_after, [3, 4, 5].map(id => `Video A sentence ${id}.`));
     await videoPage.screenshot({ path: path.join(screenshots, 'subtitles-desktop.png') });
   });
   await check('pause prevents further translation and seeking prioritizes the new position', async () => {
@@ -229,9 +236,13 @@ try {
     await videoPage.evaluate(id => window.fixture.navigate(id, 'Video B'), videoB);
     await expect(videoPage.locator('#ytai-root .translated')).toContainText('Video B sentence 0.', { timeout: 10000 });
     await videoPage.evaluate(id => window.fixture.captions(id, 'Late old captions'), videoA);
+    await videoPage.evaluate(id => window.postMessage({ channel: 'youtube-ai-subtitles-v1', type: 'PLAYER_DATA', videoId: id, videoTitle: 'Late old title', tracks: [] }, location.origin), videoA);
     await videoPage.waitForTimeout(1700);
     assert.equal((await getStatus()).videoId, videoB);
     assert.ok((await videoPage.locator('#ytai-root .translated').textContent()).includes('Video B'));
+    const body = api.bodies.find(body => body.messages[1] && JSON.parse(body.messages[1].content).subtitles[0].text === 'Video B sentence 0.');
+    assert.equal(JSON.parse(body.messages[1].content).video_title, 'Video B video title');
+    assert.ok(!api.bodies.some(body => JSON.stringify(body.messages).includes('Late old title')));
   });
   await check('fatal API failure stops after one request, restores native captions, and manual retry recovers', async () => {
     api.status = 401;
@@ -313,6 +324,83 @@ try {
     await expect.poll(async () => (await getStatus()).ready).toBe(120);
     assert.equal(api.bodies[before].max_tokens, 12800);
   });
+  await check('Hy-MT2 uses title and adjacent context in eight-cue windows while displaying each original timestamp', async () => {
+    await videoPage.evaluate(() => window.fixture.pause());
+    await options.locator('#model').fill('hy-mt2-7b');
+    await options.locator('#save').click();
+    await expect(options.locator('#notice')).toHaveText('配置已保存');
+    const before = api.calls.length;
+    await videoPage.evaluate(id => window.fixture.navigate(id, 'Context windows'), videoA);
+    await expect.poll(async () => (await getStatus()).total).toBe(24);
+    await videoPage.evaluate(() => window.fixture.play());
+    await expect.poll(async () => (await getStatus()).ready).toBe(24);
+    assert.deepEqual(api.calls.slice(before).map(batch => batch.length), [8, 8, 8]);
+    const body = api.bodies[before + 1];
+    assert.equal(body.messages.length, 1);
+    const background = JSON.parse(body.messages[0].content.split('\n')[1]);
+    assert.equal(background.视频标题, 'Context windows video title');
+    assert.deepEqual(background.前文, [5, 6, 7].map(id => `Context windows sentence ${id}.`));
+    assert.deepEqual(background.后文, [16, 17, 18].map(id => `Context windows sentence ${id}.`));
+    assert.deepEqual(api.calls[before + 1].map(line => line.id), [8, 9, 10, 11, 12, 13, 14, 15]);
+    await videoPage.evaluate(() => window.fixture.pause());
+    for (const index of [0, 7, 8, 23]) {
+      await videoPage.evaluate(index => window.fixture.seek(index * 3 + .1), index);
+      await expect(videoPage.locator('#ytai-root .translated')).toHaveText(`译文：Context windows sentence ${index}.`);
+    }
+    await expect(videoPage.locator('#ytai-root .badge')).toBeHidden();
+    await videoPage.screenshot({ path: path.join(screenshots, 'subtitles-context-windows.png') });
+  });
+  await check('context toggle persists, invalidates displayed translations and restores the configured large batch when off', async () => {
+    await videoPage.evaluate(() => window.fixture.seek(0));
+    await options.locator('#useContext').uncheck();
+    await options.locator('#save').click();
+    await expect(options.locator('#notice')).toHaveText('配置已保存');
+    await expect.poll(async () => (await getStatus()).ready).toBe(0);
+    await expect(videoPage.locator('#ytai-root .translated')).toHaveText('');
+    await options.reload();
+    await expect(options.locator('#useContext')).not.toBeChecked();
+    await expect(options.locator('#batchSize')).toHaveValue('100');
+    const before = api.calls.length;
+    await videoPage.evaluate(() => window.fixture.play());
+    await expect.poll(async () => (await getStatus()).ready).toBe(24);
+    assert.deepEqual(api.calls.slice(before).map(batch => batch.length), [24]);
+    assert.doesNotMatch(api.bodies[before].messages[0].content, /Context windows video title|【背景信息】|【待翻译文本】/);
+    await videoPage.evaluate(() => window.fixture.pause());
+    await options.locator('#useContext').check();
+    await options.locator('#save').click();
+    await expect(options.locator('#notice')).toHaveText('配置已保存');
+    await expect.poll(async () => (await getStatus()).ready).toBe(0);
+    await expect(videoPage.locator('#ytai-root .translated')).toHaveText('');
+    const beforeCached = api.calls.length;
+    await videoPage.evaluate(() => window.fixture.play());
+    await expect.poll(async () => (await getStatus()).ready).toBe(24);
+    assert.equal(api.calls.length, beforeCached);
+    await videoPage.evaluate(() => window.fixture.pause());
+    await options.reload();
+    await expect(options.locator('#useContext')).toBeChecked();
+  });
+  await check('a newly received title cancels a pending contextual request and cannot reuse the previous title cache', async () => {
+    await videoPage.evaluate(() => window.fixture.seek(0));
+    api.delay = 1300;
+    const before = api.calls.length;
+    try {
+      await videoPage.evaluate(id => window.fixture.captions(id, 'Late title captions'), videoA);
+      await videoPage.evaluate(() => window.fixture.play());
+      await expect.poll(() => api.calls.length).toBeGreaterThan(before);
+      await videoPage.evaluate(() => {
+        window.playerInfo.videoDetails.title = 'A newly received title';
+        document.dispatchEvent(new Event('yt-navigate-finish'));
+      });
+      api.delay = 0;
+      await expect.poll(async () => (await getStatus()).ready).toBe(24);
+      await videoPage.waitForTimeout(1400);
+      assert.ok(api.bodies.slice(before + 1).every(body => JSON.parse(body.messages[0].content.split('\n')[1]).视频标题 === 'A newly received title'));
+      const stored = await worker.evaluate(() => chrome.storage.local.get('translationCache'));
+      const rows = Object.values(stored.translationCache.entries).filter(entry => entry.text.startsWith('译文：Late title captions'));
+      assert.equal(rows.length, 24);
+      await expect(videoPage.locator('#ytai-root .translated')).toHaveText('译文：Late title captions sentence 0.');
+    } finally { api.delay = 0; await videoPage.evaluate(() => window.fixture.pause()); }
+  });
   await check('Hy-MT2 echoed instructions are retried by ID and never reach the overlay or cache', async () => {
     await videoPage.evaluate(() => window.fixture.pause());
     await videoPage.evaluate(() => window.fixture.seek(0));
@@ -323,7 +411,7 @@ try {
     await expect(options.locator('#notice')).toHaveText('配置已保存');
     api.hyEchoes = 1;
     const before = api.calls.length;
-    await videoPage.evaluate(id => window.fixture.captions(id, 'Hy echo regression'), videoB);
+    await videoPage.evaluate(id => window.fixture.navigate(id, 'Hy echo regression'), videoB);
     await expect.poll(async () => (await getStatus()).total).toBe(24);
     await videoPage.evaluate(() => window.fixture.play());
     await expect.poll(async () => (await getStatus()).ready).toBe(6);
@@ -362,7 +450,7 @@ try {
     assert.doesNotMatch(JSON.stringify(observed), /Taran|补给线被切断/);
     await expect(videoPage.locator('#ytai-root .translated')).toHaveText('译文：' + merged.source.text);
     const stored = await worker.evaluate(() => chrome.storage.local.get('translationCache'));
-    assert.equal(stored.translationCache.version, 5);
+    assert.equal(stored.translationCache.version, 6);
     assert.doesNotMatch(JSON.stringify(stored), /Taran|补给线被切断/);
     await expect(videoPage.locator('#ytai-root .badge')).toBeHidden();
     await videoPage.screenshot({ path: path.join(screenshots, 'subtitles-merged-regression.png') });
@@ -384,6 +472,15 @@ try {
       await expect(videoPage.locator('#ytai-root .original')).toHaveText('');
       await expect(videoPage.locator('#ytai-root .translated')).toHaveText('');
     }
+  });
+  await check('switching from a Chinese track back to English resumes contextual translation', async () => {
+    const before = api.calls.length;
+    await videoPage.evaluate(id => window.fixture.navigate(id, 'English recovery', 'en'), videoB);
+    await expect(videoPage.locator('#ytai-root .translated')).toHaveText('译文：English recovery sentence 0.', { timeout: 10000 });
+    assert.ok(api.calls.length > before);
+    assert.equal((await getStatus()).sourceLang, 'en');
+    assert.match(api.bodies[before].messages[0].content, /English recovery video title/);
+    await expect(videoPage.locator('#movie_player')).toHaveClass(/ytai-hide-native/);
   });
   await check('API key remains local and public messages do not contain it', async () => {
     const publicData = await options.evaluate(() => chrome.runtime.sendMessage({ type: 'GET_PUBLIC_CONFIG' }));

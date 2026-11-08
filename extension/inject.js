@@ -26,7 +26,10 @@
       try { selectedTrack = document.getElementById('movie_player')?.getOption?.('captions', 'track'); } catch {}
       const defaultIndex = renderer?.audioTracks?.[renderer.defaultAudioTrackIndex || 0]?.defaultCaptionTrackIndex;
       const preferred = tracks.find(track => track.languageCode === selectedTrack?.languageCode && track.kind === (selectedTrack.kind || '')) || tracks[defaultIndex];
-      post({ type: 'PLAYER_DATA', videoId, tracks, preferredURL: preferred?.baseUrl || '', isLive: Boolean(data.microformat?.playerMicroformatRenderer?.liveBroadcastDetails?.isLiveNow) });
+      const watch = document.querySelector('ytd-watch-flexy');
+      const pageTitle = watch?.getAttribute('video-id') === videoId ? watch.querySelector('ytd-watch-metadata h1')?.textContent : '';
+      const videoTitle = String(data.videoDetails.title || pageTitle || '').replace(/\s+/g, ' ').trim().slice(0, 500);
+      post({ type: 'PLAYER_DATA', videoId, videoTitle, tracks, preferredURL: preferred?.baseUrl || '', isLive: Boolean(data.microformat?.playerMicroformatRenderer?.liveBroadcastDetails?.isLiveNow) });
     } catch { /* Player responses may be absent during navigation. */ }
   }
   let captionSequence = 0;

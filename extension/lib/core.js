@@ -13,6 +13,7 @@
     viewMode: 'bilingual',
     prefetchSeconds: 45,
     batchSize: 6,
+    useContext: true,
     originalFont: 18,
     translatedFont: 22
   });
@@ -21,6 +22,8 @@
   const MAX_BODY_SIZE = 8 * 1024 * 1024;
   const MAX_BATCH_SIZE = 100;
   const MAX_PREFETCH_SECONDS = 600;
+  const MAX_CONTEXT_BATCH_SIZE = 8;
+  const MAX_VIDEO_TITLE_LENGTH = 500;
   const TERMINAL = /[.!?。！？…][\s)"'』」]*$/;
 
   function clamp(value, min, max, fallback) {
@@ -62,6 +65,7 @@
     cfg.viewMode = ['bilingual', 'translated', 'original'].includes(cfg.viewMode) ? cfg.viewMode : 'bilingual';
     cfg.enabled = Boolean(cfg.enabled);
     cfg.structuredOutput = Boolean(cfg.structuredOutput);
+    cfg.useContext = Boolean(cfg.useContext);
     cfg.requestTimeoutSeconds = clamp(cfg.requestTimeoutSeconds, 15, 300, DEFAULTS.requestTimeoutSeconds);
     cfg.prefetchSeconds = clamp(cfg.prefetchSeconds, 15, MAX_PREFETCH_SECONDS, DEFAULTS.prefetchSeconds);
     cfg.batchSize = clamp(cfg.batchSize, 1, MAX_BATCH_SIZE, DEFAULTS.batchSize);
@@ -201,7 +205,8 @@
     const end = timeMs + cfg.prefetchSeconds * 1000;
     const candidates = cues.filter(cue => !cue.translated &&
       (cue.id === active || (cue.start >= timeMs && cue.start <= end)));
-    const lines = candidates.slice(0, cfg.batchSize).map(({ id, text }) => ({ id, text }));
+    const limit = cfg.useContext !== false && isHyMTModel(cfg.model) ? Math.min(cfg.batchSize, MAX_CONTEXT_BATCH_SIZE) : cfg.batchSize;
+    const lines = candidates.slice(0, limit).map(({ id, text }) => ({ id, text }));
     if (!lines.length) return null;
     return {
       lines,
@@ -328,7 +333,7 @@
     return mapped;
   }
 
-  function parseLineTranslations(content, lines, instructions = []) {
+  function parseLineTranslations(content, lines, instructions = [], { strictIds = false, referenceTexts = [] } = {}) {
     if (typeof content !== 'string' || !content.trim()) throw new Error('模型没有返回文字译文');
     const cleaned = content.trim();
     let structured;
@@ -339,6 +344,7 @@
     const finish = translations => {
       const accepted = translations.filter(line => {
         const source = lines.find(source => source.id === line.id)?.text;
+        if (strictIds && /【(?:背景信息|待翻译文本)】/.test(line.text) && !/【(?:背景信息|待翻译文本)】/.test(source || '')) return false;
         const markers = numberedRows(line.text);
         const extraMarkers = markers.length > 1 || (markers.length === 1 && markers[0].id !== line.id &&
           /[\[【<〈《（(]\s*\d+\s*[\]】>〉》）)]/u.test(line.text));
@@ -346,7 +352,10 @@
           retryIndividually = true;
           return false;
         }
-        return !isPromptEcho(line.text, source, instructions);
+        const normalize = value => String(value || '').normalize('NFKC').toLowerCase().replace(/[\p{P}\p{S}\s]/gu, '');
+        const output = normalize(line.text), original = normalize(source);
+        const referenceLeak = referenceTexts.map(normalize).some(text => text.length >= 12 && output.includes(text) && !original.includes(text));
+        return !referenceLeak && !isPromptEcho(line.text, source, instructions);
       }).map(line => ({ ...line, text: cleanTranslationText(line.text, line.id) })).filter(line => line.text);
       const seen = new Set(accepted.map(line => line.id));
       return { translations: accepted, missing: lines.filter(line => !seen.has(line.id)), ...(retryIndividually ? { retryIndividually: true } : {}) };
@@ -361,6 +370,10 @@
     // text instead of interpreting a year or list item as a response ID.
     if (lines.length === 1 && !startsWithBracket) return finish(hasEcho ? [] : [{ id: lines[0].id, text: cleaned }]);
     const numbered = numberedRows(cleaned);
+    if (strictIds && lines.length > 1 && (numbered.length !== lines.length || numbered.some((row, index) => row.id !== lines[index].id))) {
+      retryIndividually = true;
+      return finish([]);
+    }
     const validRows = numbered.filter(row => !isPromptEcho(row.text,
       lines.find(line => line.id === row.id)?.text ?? lines.map(line => line.text).join('\n'), instructions));
     const plainRows = cleaned.replace(/```(?:text|txt)?/gi, '').replace(/```/g, '').split(/\r?\n/);
@@ -393,7 +406,7 @@
   }
 
   globalThis.YTAICore = Object.freeze({
-    DEFAULTS, CHANNEL, MAX_BODY_SIZE, MAX_BATCH_SIZE, MAX_PREFETCH_SECONDS, VIDEO_ID_RE, clamp, isLocalAPI, isHyMTModel, isCompatibleAPI, normalizeBaseURL, normalizeConfig, publicConfig,
+    DEFAULTS, CHANNEL, MAX_BODY_SIZE, MAX_BATCH_SIZE, MAX_PREFETCH_SECONDS, MAX_CONTEXT_BATCH_SIZE, MAX_VIDEO_TITLE_LENGTH, VIDEO_ID_RE, clamp, isLocalAPI, isHyMTModel, isCompatibleAPI, normalizeBaseURL, normalizeConfig, publicConfig,
     getVideoId, captionURL, trackKey, isChineseLanguage, isChineseTrack, parseCaptions, normalizeCues, groupCues, activeIndex, pickBatch, parseTranslations, parseLineTranslations, cleanTranslationText, isTranslationPlausible, digest
   });
 })();

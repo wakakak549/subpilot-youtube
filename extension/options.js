@@ -10,6 +10,7 @@ function readConfig() {
   const cfg = Object.fromEntries(valueFields.map(key => [key, document.getElementById(key).value]));
   cfg.enabled = document.getElementById('enabled').checked;
   cfg.structuredOutput = document.getElementById('structuredOutput').checked;
+  cfg.useContext = document.getElementById('useContext').checked;
   cfg.viewMode = form.querySelector('[name="viewMode"]:checked')?.value || 'bilingual';
   return Core.normalizeConfig(cfg);
 }
@@ -26,6 +27,7 @@ function fillConfig(cfg) {
   }
   document.getElementById('enabled').checked = cfg.enabled;
   document.getElementById('structuredOutput').checked = cfg.structuredOutput;
+  document.getElementById('useContext').checked = cfg.useContext;
   form.querySelector(`[name="viewMode"][value="${cfg.viewMode}"]`).checked = true;
   updateOutputs();
 }

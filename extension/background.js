@@ -46,6 +46,7 @@ function validateTranslation(message, sender) {
   if (!sender.tab?.id || Core.getVideoId(sender.tab.url || sender.url) !== message.videoId) throw new ApiError('INVALID', '字幕请求来自无效视频');
   if (typeof message.sessionId !== 'string' || message.sessionId.length > 80 || typeof message.trackId !== 'string' || message.trackId.length > 256) throw new ApiError('INVALID', '字幕会话无效');
   if (!Array.isArray(message.lines) || !message.lines.length || message.lines.length > Core.MAX_BATCH_SIZE) throw new ApiError('INVALID', '字幕批量大小无效');
+  if (message.videoTitle !== undefined && (typeof message.videoTitle !== 'string' || message.videoTitle.length > Core.MAX_VIDEO_TITLE_LENGTH)) throw new ApiError('INVALID', '视频标题无效');
   const ids = new Set();
   for (const line of message.lines) {
     if (!Number.isInteger(line.id) || line.id < 0 || ids.has(line.id) || typeof line.text !== 'string' || line.text.length > 3000 || !line.text.trim()) throw new ApiError('INVALID', '字幕内容无效');

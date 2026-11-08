@@ -44,6 +44,7 @@
         <div class="fields">
           <div class="field"><div class="range-label"><label for="prefetchSeconds">预取时长</label><output id="prefetchSecondsValue"></output></div><input id="prefetchSeconds" type="range" min="15" max="600" step="5"></div>
           <div class="field"><label for="batchSize">每次翻译段数</label><input id="batchSize" type="number" min="1" max="100" step="1" required></div>
+          <div class="field full"><label class="check"><input id="useContext" type="checkbox" aria-describedby="contextHelp">结合标题与前后字幕翻译</label><p id="contextHelp" class="muted">发送视频标题和前后各最多 3 条字幕帮助理解；Hy-MT2 每批最多 8 条，逐句显示。关闭后按原有批量配置翻译。</p></div>
         </div>
       </section>
       <section class="section"><div class="section-title"><h2>本地缓存</h2></div><div class="cache-row"><p id="cacheStats" class="muted">正在读取</p><button type="button" id="clearCache" class="danger"><i data-lucide="trash-2"></i>清空缓存</button></div></section>
