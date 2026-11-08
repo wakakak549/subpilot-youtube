@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "SubPilot - YouTube AI 双语字幕",
-  "version": "0.1.6",
+  "version": "0.1.7",
   "description": "使用自己的 AI API 翻译 YouTube 字幕，支持双语显示、提前翻译和本地缓存。",
   "minimum_chrome_version": "116",
   "permissions": ["storage"],

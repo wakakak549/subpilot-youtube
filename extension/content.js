@@ -5,6 +5,7 @@
   let videoId = null, generation = 0, requestVersion = 0;
   let sessionId = crypto.randomUUID();
   let cues = [], trackId = '', fingerprint = '', tracks = [];
+  let sourceIsChinese = false, sourceLanguage = '';
   let pending = false, error = null, isLive = false, playerDataReceived = false;
   let player = null, video = null, root = null, shadow = null;
   let originalEl = null, translatedEl = null, badgeEl = null;
@@ -17,7 +18,7 @@
   const labels = {
     IDLE: '打开 YouTube 视频', OFF: '翻译已关闭', WAITING: '等待字幕', NO_CAPTIONS: '没有可用字幕',
     LIVE: '暂不支持直播字幕', CONFIG: '待配置翻译接口', TRANSLATING: '正在翻译', PAUSED: '已暂停',
-    READY: '字幕已就绪', ERROR: '翻译暂停', CC_OFF: '字幕未开启', ORIGINAL: '显示原文', AD: '广告播放中', CAPTION_ERROR: '字幕暂时无法读取'
+    READY: '字幕已就绪', ERROR: '翻译暂停', CC_OFF: '字幕未开启', ORIGINAL: '显示原文', ORIGINAL_SOURCE: '中文原字幕', AD: '广告播放中', CAPTION_ERROR: '字幕暂时无法读取'
   };
 
   function send(message) { return chrome.runtime.sendMessage(message); }
@@ -36,6 +37,7 @@
     else if (!config?.enabled) code = 'OFF';
     else if (player?.classList.contains('ad-showing')) code = 'AD';
     else if (isLive) code = 'LIVE';
+    else if (sourceIsChinese && cues.length) code = 'ORIGINAL_SOURCE';
     else if (error) code = 'ERROR';
     else if (config.viewMode === 'original' && cues.length) code = 'ORIGINAL';
     else if (config.viewMode !== 'original' && (!config.model || (!config.hasApiKey && new URL(config.baseURL).hostname === 'api.openai.com'))) code = 'CONFIG';
@@ -48,7 +50,7 @@
     return {
       code, label: labels[code], videoId, error,
       ready: cues.filter(cue => cue.translated).length, total: cues.length,
-      requests, cacheHits, sourceLang: tracks.find(track => Core.trackKey(new URL(track.baseUrl)) === trackId.split(':')[0])?.languageCode || '',
+      requests, cacheHits, sourceLang: sourceLanguage || tracks.find(track => Core.trackKey(new URL(track.baseUrl)) === trackId.split(':')[0])?.languageCode || '',
       enabled: Boolean(config?.enabled)
     };
   }
@@ -62,7 +64,8 @@
     clearTimeout(fallbackTimer);
     triedURLs.clear();
     videoId = nextId;
-    cues = []; tracks = []; trackId = ''; fingerprint = ''; error = null; isLive = false; playerDataReceived = false;
+    cues = []; tracks = []; trackId = ''; fingerprint = ''; sourceIsChinese = false; sourceLanguage = '';
+    error = null; isLive = false; playerDataReceived = false;
     captionSequence = 0; fallbackURL = null; bufferedCaption = null;
     startedAt = Date.now(); ccTried = false; requests = 0; cacheHits = 0;
     restoreNative();
@@ -136,7 +139,7 @@
   function render() {
     if (!player || !originalEl || !config) return;
     const currentState = state();
-    const blocked = !config.enabled || !videoId || isLive || !captionsOn() || player.classList.contains('ad-showing');
+    const blocked = !config.enabled || !videoId || isLive || sourceIsChinese || !captionsOn() || player.classList.contains('ad-showing');
     const index = Core.activeIndex(cues, (video?.currentTime || 0) * 1000);
     const cue = cues[index];
     const ready = cue?.translated;
@@ -149,7 +152,7 @@
     if (originalEl.textContent !== original) originalEl.textContent = original;
     if (translatedEl.textContent !== translated) translatedEl.textContent = translated;
     fitCaptions(original, translated);
-    const badge = blocked || ['READY', 'PAUSED', 'ORIGINAL', 'CC_OFF', 'TRANSLATING'].includes(currentState.code) ? '' :
+    const badge = blocked || ['READY', 'PAUSED', 'ORIGINAL', 'ORIGINAL_SOURCE', 'CC_OFF', 'TRANSLATING'].includes(currentState.code) ? '' :
       error?.message || currentState.label;
     if (badgeEl.textContent !== badge) badgeEl.textContent = badge;
     badgeEl.dataset.error = String(Boolean(error));
@@ -185,6 +188,10 @@
     if (!fallback) captionSequence = sequence;
     if (!config) { bufferedCaption = data; return; }
     if (!config.enabled) return;
+    const sourceTrack = tracks.find(track => {
+      try { return Core.trackKey(new URL(track.baseUrl)) === Core.trackKey(url); } catch { return false; }
+    });
+    const chineseSource = Core.isChineseTrack(sourceTrack, url);
     const sourceGeneration = generation;
     const parsing = ++parseVersion;
     const parsed = Core.groupCues(Core.parseCaptions(data.body));
@@ -195,6 +202,8 @@
     if (fingerprint === nextTrack) return;
     invalidateRequest();
     cues = parsed; trackId = nextTrack; fingerprint = nextTrack; error = null;
+    sourceIsChinese = chineseSource;
+    sourceLanguage = sourceTrack?.languageCode || url.searchParams.get('lang') || url.searchParams.get('tlang') || '';
     clearTimeout(fallbackTimer);
     render();
     pump();
@@ -234,7 +243,7 @@
 
   async function pump() {
     syncRoute();
-    if (!config?.enabled || !videoId || !video || video.paused || video.seeking || !captionsOn() || isLive || player?.classList.contains('ad-showing') || pending || error || config.viewMode === 'original') return;
+    if (!config?.enabled || !videoId || !video || video.paused || video.seeking || !captionsOn() || isLive || sourceIsChinese || player?.classList.contains('ad-showing') || pending || error || config.viewMode === 'original') return;
     if (!config.model || (!config.hasApiKey && new URL(config.baseURL).hostname === 'api.openai.com')) { render(); return; }
     const batch = Core.pickBatch(cues, video.currentTime * 1000, config);
     if (!batch) return;
@@ -295,7 +304,16 @@
       playerDataReceived = true;
       isLive = Boolean(data.isLive);
       if (isLive) invalidateRequest();
-      else if (!cues.length && tracks.length && Core.captionURL(data.preferredURL, videoId)) scheduleFallback(data.preferredURL);
+      else if (!cues.length && tracks.length && Core.captionURL(data.preferredURL, videoId)) {
+        const preferredURL = Core.captionURL(data.preferredURL, videoId);
+        const preferredTrack = tracks.find(track => {
+          try { return Core.trackKey(new URL(track.baseUrl)) === Core.trackKey(preferredURL); } catch { return false; }
+        });
+        sourceIsChinese = Core.isChineseTrack(preferredTrack, preferredURL);
+        sourceLanguage = preferredTrack?.languageCode || preferredURL.searchParams.get('lang') || preferredURL.searchParams.get('tlang') || '';
+        if (sourceIsChinese) { invalidateRequest(); restoreNative(); }
+        scheduleFallback(data.preferredURL);
+      }
       render();
     }
   });

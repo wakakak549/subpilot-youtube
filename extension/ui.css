@@ -73,7 +73,7 @@ details .fields { margin-top: 15px; }
 .popup-status { min-height: 76px; }
 .status-line { display: flex; align-items: center; gap: 8px; margin-bottom: 5px; font-weight: 600; }
 .status-dot { width: 8px; height: 8px; border-radius: 50%; background: #9da7a0; flex-shrink: 0; }
-.status-dot[data-state="READY"], .status-dot[data-state="TRANSLATING"] { background: var(--accent); }
+.status-dot[data-state="READY"], .status-dot[data-state="TRANSLATING"], .status-dot[data-state="ORIGINAL_SOURCE"] { background: var(--accent); }
 .status-dot[data-state="ERROR"], .status-dot[data-state="CONFIG"] { background: #c58015; }
 .status-dot[data-state="CAPTION_ERROR"] { background: #c58015; }
 #videoDetail { min-height: 20px; color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }

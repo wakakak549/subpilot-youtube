@@ -63,6 +63,19 @@ test('caption URLs and video navigation cannot cross video or origin boundaries'
   assert.equal(Core.captionURL(`https://evil.example/api/timedtext?v=${videoA}`, videoA), null);
 });
 
+test('simplified and traditional Chinese caption tracks stay as native subtitles', () => {
+  for (const code of ['zh', 'zh-Hans', 'zh-Hans-CN', 'zh-CN', 'zh-Hant', 'zh-Hant-TW', 'zh-TW', 'zh-HK']) {
+    assert.equal(Core.isChineseLanguage(code), true, code);
+  }
+  assert.equal(Core.isChineseLanguage('en'), false);
+  assert.equal(Core.isChineseTrack({ languageCode: 'zh-Hans', name: 'Chinese (Simplified)' }), true);
+  assert.equal(Core.isChineseTrack({ languageCode: 'zh-Hant', name: '繁體中文' }), true);
+  assert.equal(Core.isChineseTrack({ languageCode: 'en', name: 'English' }, new URL('https://www.youtube.com/api/timedtext?v=abcdefghijk&lang=zh-TW')), true);
+  assert.equal(Core.isChineseTrack({ languageCode: 'zh-Hans', name: 'Chinese (Simplified)' }, new URL('https://www.youtube.com/api/timedtext?v=abcdefghijk&lang=zh-Hans&tlang=en')), false);
+  assert.equal(Core.isChineseTrack({ languageCode: 'en', name: 'English' }, new URL('https://www.youtube.com/api/timedtext?v=abcdefghijk&lang=en&tlang=zh-Hant')), true);
+  assert.equal(Core.isChineseTrack({ languageCode: 'en', name: 'English' }, new URL('https://www.youtube.com/api/timedtext?v=abcdefghijk&lang=en')), false);
+});
+
 test('JSON output validates IDs, nonempty strings and completeness', () => {
   const lines = [{ id: 2, text: 'A' }, { id: 8, text: 'B' }];
   const result = Core.parseTranslations('```json\n{"translations":[{"id":2,"text":"Good"},{"id":2,"text":"Duplicate"},{"id":8,"text":" "},{"id":99,"text":"Wrong"}]}\n```', lines);

@@ -95,10 +95,10 @@ const fixture = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Subtitl
     play() { return video.play(); },
     pause() { video.pause(); },
     seek(time) { video.currentTime = time; return new Promise(resolve => video.addEventListener('seeked', resolve, { once: true })); },
-    async captions(id, prefix) { await fetch('/api/timedtext?v=' + id + '&lang=en&fmt=json3&name=' + encodeURIComponent(prefix)); },
-    async navigate(id, prefix) { document.dispatchEvent(new Event('yt-navigate-start')); history.pushState({}, '', '/watch?v=' + id); video.currentTime = 0; window.playerInfo = {
-      videoDetails: { videoId: id }, captions: { playerCaptionsTracklistRenderer: { captionTracks: prefix ? [{ baseUrl: 'https://www.youtube.com/api/timedtext?v=' + id + '&lang=en&fmt=json3&name=' + encodeURIComponent(prefix), languageCode: 'en' }] : [] } }
-    }; document.dispatchEvent(new Event('yt-navigate-finish')); if (prefix) await window.fixture.captions(id, prefix); }
+    async captions(id, prefix, language = 'en') { await fetch('/api/timedtext?v=' + id + '&lang=' + encodeURIComponent(language) + '&fmt=json3&name=' + encodeURIComponent(prefix)); },
+    async navigate(id, prefix, language = 'en') { document.dispatchEvent(new Event('yt-navigate-start')); history.pushState({}, '', '/watch?v=' + id); video.currentTime = 0; window.playerInfo = {
+      videoDetails: { videoId: id }, captions: { playerCaptionsTracklistRenderer: { captionTracks: prefix ? [{ baseUrl: 'https://www.youtube.com/api/timedtext?v=' + id + '&lang=' + encodeURIComponent(language) + '&fmt=json3&name=' + encodeURIComponent(prefix), languageCode: language }] : [] } }
+    }; document.dispatchEvent(new Event('yt-navigate-finish')); if (prefix) await window.fixture.captions(id, prefix, language); }
   };
   window.playerInfo = { videoDetails: { videoId: '${videoA}' }, captions: { playerCaptionsTracklistRenderer: { captionTracks: [{ baseUrl: 'https://www.youtube.com/api/timedtext?v=${videoA}&lang=en&fmt=json3&name=Video%20A', languageCode: 'en' }] } } };
   document.querySelector('#movie_player').getPlayerResponse = () => window.playerInfo;
@@ -371,6 +371,19 @@ try {
     await videoPage.evaluate(id => window.fixture.navigate(id, ''), videoC);
     await expect.poll(async () => (await getStatus()).code).toBe('NO_CAPTIONS');
     await expect(videoPage.locator('#movie_player')).not.toHaveClass(/ytai-hide-native/);
+  });
+  await check('Chinese caption tracks keep native subtitles and never call the translation API', async () => {
+    for (const [id, language] of [[videoC, 'zh-Hans'], [videoA, 'zh-Hant']]) {
+      const before = api.calls.length;
+      await videoPage.evaluate(({ id, language }) => window.fixture.navigate(id, 'Chinese ' + language, language), { id, language });
+      await expect.poll(async () => (await getStatus()).code).toBe('ORIGINAL_SOURCE');
+      await videoPage.evaluate(() => window.fixture.play());
+      await videoPage.waitForTimeout(1200);
+      assert.equal(api.calls.length, before);
+      assert.equal(await videoPage.locator('#movie_player').evaluate(player => player.classList.contains('ytai-hide-native')), false);
+      await expect(videoPage.locator('#ytai-root .original')).toHaveText('');
+      await expect(videoPage.locator('#ytai-root .translated')).toHaveText('');
+    }
   });
   await check('API key remains local and public messages do not contain it', async () => {
     const publicData = await options.evaluate(() => chrome.runtime.sendMessage({ type: 'GET_PUBLIC_CONFIG' }));

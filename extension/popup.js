@@ -8,7 +8,8 @@ async function refreshStatus() {
     const status = await chrome.tabs.sendMessage(tabId, { type: 'GET_STATUS' });
     document.getElementById('videoStatus').textContent = status.label;
     document.getElementById('statusDot').dataset.state = status.code;
-    detail.textContent = status.error?.message || (status.total ? `已翻译 ${status.ready}/${status.total} 段 · 缓存命中 ${status.cacheHits} 段` : '');
+    detail.textContent = status.error?.message || (status.code === 'ORIGINAL_SOURCE' ? `已保留 YouTube 原字幕 · ${status.total} 段` :
+      (status.total ? `已翻译 ${status.ready}/${status.total} 段 · 缓存命中 ${status.cacheHits} 段` : ''));
     document.getElementById('retry').disabled = !status.videoId || !config?.enabled;
   } catch {
     document.getElementById('videoStatus').textContent = '未连接视频页';

@@ -1,6 +1,6 @@
 {
   "name": "subpilot-youtube",
-  "version": "0.1.6",
+  "version": "0.1.7",
   "description": "Translate YouTube captions with your own AI API or a local LM Studio model.",
   "license": "MIT",
   "repository": {

@@ -95,6 +95,26 @@
     return ['lang', 'kind', 'name', 'tlang'].map(key => url.searchParams.get(key) || '').join('|');
   }
 
+  function isChineseLanguage(value) {
+    const language = String(value || '').trim().replaceAll('_', '-').toLowerCase();
+    // YouTube uses both BCP-47 tags and short regional tags for Chinese
+    // caption tracks. A bare `zh` is also treated as Chinese because the
+    // track metadata may omit whether it is simplified or traditional.
+    return language === 'zh' || /^zh-(?:hans?|hant?|cn|sg|my|tw|hk|mo)(?:-|$)/.test(language);
+  }
+
+  function isChineseTrack(track, url) {
+    const parsed = typeof url === 'string' ? (() => { try { return new URL(url); } catch { return null; } })() : url;
+    // `tlang` is the language of YouTube's translated response, so it takes
+    // precedence over the source `lang` when both are present.
+    if (parsed?.searchParams?.has('tlang')) return isChineseLanguage(parsed.searchParams.get('tlang'));
+    const languageCode = track?.languageCode;
+    if (isChineseLanguage(languageCode)) return true;
+    if (isChineseLanguage(parsed?.searchParams?.get('lang'))) return true;
+    const name = String(track?.name || '').replace(/[()（）【】\[\]]/g, ' ').trim();
+    return /(?:简体中文|繁体中文|繁體中文|簡體中文|中文\s*[（(]?\s*(?:简体|繁体|簡體|繁體)\s*[）)]?|(?:simplified|traditional)\s+chinese|chinese\s*\((?:simplified|traditional)\))/i.test(name);
+  }
+
   function cleanText(value) {
     return String(value || '').replace(/\s+/g, ' ').trim();
   }
@@ -374,6 +394,6 @@
 
   globalThis.YTAICore = Object.freeze({
     DEFAULTS, CHANNEL, MAX_BODY_SIZE, MAX_BATCH_SIZE, MAX_PREFETCH_SECONDS, VIDEO_ID_RE, clamp, isLocalAPI, isHyMTModel, isCompatibleAPI, normalizeBaseURL, normalizeConfig, publicConfig,
-    getVideoId, captionURL, trackKey, parseCaptions, normalizeCues, groupCues, activeIndex, pickBatch, parseTranslations, parseLineTranslations, cleanTranslationText, isTranslationPlausible, digest
+    getVideoId, captionURL, trackKey, isChineseLanguage, isChineseTrack, parseCaptions, normalizeCues, groupCues, activeIndex, pickBatch, parseTranslations, parseLineTranslations, cleanTranslationText, isTranslationPlausible, digest
   });
 })();

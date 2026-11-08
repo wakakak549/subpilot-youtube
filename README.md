@@ -6,7 +6,7 @@ English | [简体中文](README.zh-CN.md)
 
 SubPilot is a Chrome Manifest V3 extension that translates existing YouTube captions and displays them in sync with playback. Bring your own API endpoint, key, and model; no SubPilot account or backend is required.
 
-Current version: **0.1.6**. The settings and popup are currently in Simplified Chinese. The default translation language is Simplified Chinese and can be changed in settings.
+Current version: **0.1.7**. The settings and popup are currently in Simplified Chinese. The default translation language is Simplified Chinese and can be changed in settings.
 
 ## Features
 
@@ -15,6 +15,7 @@ Current version: **0.1.6**. The settings and popup are currently in Simplified C
 - Up to **100 subtitle segments per request**, with a configurable **15–600 second** look-ahead window.
 - Local translation cache, bounded retries, cancellation on video changes, and native-caption fallback on errors.
 - Dedicated Hy-MT2 prompts and output validation to reject merged paragraphs, missing IDs, and echoed instructions.
+- Simplified and Traditional Chinese caption tracks stay as native YouTube subtitles and never call the translation API.
 - API keys stored in local extension storage; access to your API host is requested when you configure it.
 
 ## Install
@@ -35,7 +36,7 @@ Requires desktop **Chrome 116+** and a YouTube video with existing captions.
 
 The checked-in `extension/` folder is ready to load. **Node.js is only needed for development.**
 
-To update an unpacked installation, replace or pull the files, reload SubPilot on `chrome://extensions/`, then refresh YouTube. Version 0.1.6 discards older translation caches while keeping API settings.
+To update an unpacked installation, replace or pull the files, reload SubPilot on `chrome://extensions/`, then refresh YouTube. Version 0.1.7 keeps the existing translation cache and API settings.
 
 ## Configure your API
 
